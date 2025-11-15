@@ -1,0 +1,8 @@
+# ignore env files anywhere
+**/.env
+**/.env.local
+**/.env.*
+# OS / IDE files
+.DS_Store
+.idea/
+__pycache__/

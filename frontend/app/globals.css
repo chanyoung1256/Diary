@@ -1,0 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Dongle:wght@300;400;700&family=Gamja+Flower&display=swap');
+
+@import "tailwindcss";
+
+:root {
+  --font-title: 'Gamja Flower', sans-serif;
+  --font-body: 'Dongle', sans-serif;
+
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-body); /* 💡 수정: 감정일기 기본 폰트 적용 */
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body); /* 💡 감정일기 폰트 적용 */
+}
