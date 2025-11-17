@@ -5,12 +5,11 @@ import { motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 
-// ------------------------
-// 메인으로 버튼 (차녕 스타일)
-// ------------------------
+// -----------------------------------------------------
+// ⭐ 메인으로 이동 버튼 (차녕 스타일)
+// -----------------------------------------------------
 function MainButton() {
   const router = useRouter();
-
   return (
     <motion.button
       onClick={() => router.push("/main")}
@@ -27,9 +26,9 @@ function MainButton() {
   );
 }
 
-// ------------------------
-// Chart.js 동적 import
-// ------------------------
+// -----------------------------------------------------
+// Chart.js 동적 import (SSR 방지)
+// -----------------------------------------------------
 const Bar = dynamic(() => import("react-chartjs-2").then((m) => m.Bar), { ssr: false });
 const Doughnut = dynamic(
   () => import("react-chartjs-2").then((m) => m.Doughnut),
@@ -37,6 +36,9 @@ const Doughnut = dynamic(
 );
 const Line = dynamic(() => import("react-chartjs-2").then((m) => m.Line), { ssr: false });
 
+// -----------------------------------------------------
+// 타입 정의
+// -----------------------------------------------------
 type Diary = {
   id: number;
   username: string;
@@ -46,19 +48,26 @@ type Diary = {
 };
 
 export default function StatsPage() {
+  // -----------------------------------------------------
+  // 상태값
+  // -----------------------------------------------------
   const [chartLoaded, setChartLoaded] = useState(false);
   const [user, setUser] = useState<{ username: string; name: string } | null>(null);
   const [weekData, setWeekData] = useState<Diary[]>([]);
+  const [aiResult, setAiResult] = useState<{
+    summary: string;
+    advice: string;
+    activities: string[];
+  } | null>(null);
 
   const emotions = ["😊", "😢", "😡", "😌", "🤔", "🥰"];
 
-  // ------------------------
-  // Chart.js register
-  // ------------------------
+  // -----------------------------------------------------
+  // Chart.js 등록
+  // -----------------------------------------------------
   useEffect(() => {
-    async function loadCharts() {
+    async function loadChartJS() {
       const chart = await import("chart.js");
-
       chart.Chart.register(
         chart.BarElement,
         chart.ArcElement,
@@ -69,15 +78,14 @@ export default function StatsPage() {
         chart.Tooltip,
         chart.Legend
       );
-
       setChartLoaded(true);
     }
-    loadCharts();
+    loadChartJS();
   }, []);
 
-  // ------------------------
-  // 데이터 불러오기
-  // ------------------------
+  // -----------------------------------------------------
+  // 유저 정보 로딩 + 일기 불러오기
+  // -----------------------------------------------------
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (!stored) return;
@@ -101,9 +109,50 @@ export default function StatsPage() {
       });
   }, []);
 
-  // ------------------------
-  // 감정 집계
-  // ------------------------
+  // -----------------------------------------------------
+  // GPT 분석 요청
+  // -----------------------------------------------------
+  async function loadAIStats() {
+    if (weekData.length === 0) return;
+
+    // FastAPI 요청
+    const res = await fetch("http://localhost:5001/analyze/stats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ diaries: weekData }),
+    });
+
+    const data = await res.json();
+    setAiResult(data);
+
+    // Spring 저장
+    if (user) {
+      const weekStart = weekData[0].date;
+      const weekEnd = weekData[weekData.length - 1].date;
+
+      await fetch("http://localhost:8080/stats/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: user.username,
+          weekStart,
+          weekEnd,
+          summary: data.summary,
+          advice: data.advice,
+          activities: JSON.stringify(data.activities),
+        }),
+      });
+    }
+  }
+
+  // GPT 자동 호출
+  useEffect(() => {
+    if (weekData.length > 0) loadAIStats();
+  }, [weekData]);
+
+  // -----------------------------------------------------
+  // 감정 개수 계산
+  // -----------------------------------------------------
   const emotionCount: Record<string, number> = {
     "😊": 0,
     "😢": 0,
@@ -117,6 +166,9 @@ export default function StatsPage() {
     emotionCount[d.emotion]++;
   });
 
+  // -----------------------------------------------------
+  // Chart 데이터 생성
+  // -----------------------------------------------------
   const barData = {
     labels: emotions,
     datasets: [
@@ -145,9 +197,6 @@ export default function StatsPage() {
     ],
   };
 
-  // ------------------------
-  // 감정 점수화
-  // ------------------------
   const emotionScore: Record<string, number> = {
     "😊": 5,
     "🥰": 4,
@@ -168,35 +217,17 @@ export default function StatsPage() {
         label: "감정 점수 변화",
         data: sorted.map((d) => emotionScore[d.emotion]),
         borderColor: "#ff9aa0",
-        tension: 0.35,
         backgroundColor: "#ffb5bd70",
+        tension: 0.35,
         pointRadius: 5,
         pointHoverRadius: 7,
       },
     ],
   };
 
-  // ------------------------
-  // GPT 감성 메시지
-  // ------------------------
-  const summaryGPT =
-    weekData.length === 0
-      ? "지난 7일 동안 작성된 일기가 없어서 감정을 분석하기 어려웠어요."
-      : (() => {
-          const most = emotions.reduce((a, b) =>
-            emotionCount[a] > emotionCount[b] ? a : b
-          );
-
-          return `지난 7일 동안 가장 두드러진 감정은 ${most} 이었어요.
-이 감정은 차녕님의 최근 하루하루가 어떤 느낌으로 흘러갔는지 알려주는 중요한 신호예요.`;
-        })();
-
-  const activityGPT = `
-감정을 억누르는 대신, 조용히 바라보는 시간을 가져보면 도움이 될 수 있어요.
-오늘은 산책 10분, 좋아하는 음악 한 곡, 따뜻한 차 한 잔으로
-마음을 천천히 풀어보는 건 어떨까요?
-`;
-
+  // -----------------------------------------------------
+  // 반환 UI
+  // -----------------------------------------------------
   return (
     <main
       className="min-h-screen px-6 py-14 relative"
@@ -206,17 +237,11 @@ export default function StatsPage() {
           "url('https://www.transparenttextures.com/patterns/paper-fibers.png')",
       }}
     >
-      {/* 메인으로 버튼 */}
       <MainButton />
 
-      {/* TITLE */}
-      <motion.h1
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-center text-5xl font-serif font-bold text-stone-800 mb-16 tracking-wide"
-      >
+      <h1 className="text-center text-5xl font-serif font-bold text-stone-800 mb-16 tracking-wide">
         📊 감정 통계
-      </motion.h1>
+      </h1>
 
       {!chartLoaded ? (
         <p className="text-center text-lg">차트를 불러오는 중이에요...</p>
@@ -228,19 +253,16 @@ export default function StatsPage() {
             animate={{ opacity: 1 }}
             className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-14"
           >
-            {/* Bar */}
             <div className="p-8 rounded-3xl bg-white/80 shadow border border-[#e8e2d8]">
               <h2 className="text-xl font-semibold mb-6">📌 감정 빈도</h2>
               <Bar data={barData} />
             </div>
 
-            {/* Doughnut */}
             <div className="p-8 rounded-3xl bg-white/80 shadow border border-[#e8e2d8]">
               <h2 className="text-xl font-semibold mb-6">📌 감정 비율</h2>
               <Doughnut data={doughnutData} />
             </div>
 
-            {/* Line */}
             <div className="p-8 rounded-3xl bg-white/80 shadow border border-[#e8e2d8] col-span-1 lg:col-span-2">
               <h2 className="text-xl font-semibold mb-6">📌 감정 변화 흐름</h2>
               <Line data={lineData} />
@@ -248,17 +270,31 @@ export default function StatsPage() {
           </motion.div>
 
           {/* GPT 분석 */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="max-w-3xl mx-auto mt-20 p-10 rounded-3xl bg-white/70 shadow border border-[#e8e2d8]"
-          >
-            <h2 className="text-3xl font-semibold mb-6">✨ 감정 요약</h2>
-            <p className="text-lg mb-6 whitespace-pre-line leading-relaxed">{summaryGPT}</p>
+          {aiResult && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="max-w-3xl mx-auto mt-20 p-10 rounded-3xl bg-white/70 shadow border border-[#e8e2d8]"
+            >
+              <h2 className="text-3xl font-semibold mb-6">✨ 이번 주 감정 분석 (GPT)</h2>
 
-            <h3 className="text-2xl font-semibold mb-4">🌿 추천 활동</h3>
-            <p className="text-lg whitespace-pre-line leading-relaxed">{activityGPT}</p>
-          </motion.div>
+              <p className="text-lg mb-6 whitespace-pre-line leading-relaxed">
+                {aiResult.summary}
+              </p>
+
+              <h3 className="text-2xl font-semibold mb-4">🌿 조언</h3>
+              <p className="text-lg whitespace-pre-line leading-relaxed">
+                {aiResult.advice}
+              </p>
+
+              <h3 className="text-2xl font-semibold mb-4">🌼 활동 추천</h3>
+              <ul className="list-disc ml-6 text-lg">
+                {aiResult.activities.map((a, i) => (
+                  <li key={i}>{a}</li>
+                ))}
+              </ul>
+            </motion.div>
+          )}
         </>
       )}
     </main>
