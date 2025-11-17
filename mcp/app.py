@@ -4,20 +4,20 @@ from pydantic import BaseModel
 import openai
 from dotenv import load_dotenv
 import os
+import json
 
 # ----------------------------------------
-# Load .env
+# Load env
 # ----------------------------------------
 load_dotenv()
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
-
 if not OPENAI_KEY:
-    raise Exception("❌ .env에 OPENAI_API_KEY가 없습니다!")
+    raise Exception("❌ .env에 OPENAI_API_KEY 없음!")
 
 openai.api_key = OPENAI_KEY
 
 # ----------------------------------------
-# FastAPI 설정
+# FastAPI
 # ----------------------------------------
 app = FastAPI()
 
@@ -29,81 +29,76 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # ----------------------------------------
-# 모델
+# Models
 # ----------------------------------------
-class DiaryItems(BaseModel):
-    contents: list[str]
+class DiaryItem(BaseModel):
+    id: int
+    username: str
+    date: str
+    content: str
+    emotion: str
+
+class DiaryStats(BaseModel):
+    diaries: list[DiaryItem]
 
 
-# ----------------------------------------
-# 2) 여러 문장 감정 분석 + 위로 + 조절 팁 + 추천 활동
-# ----------------------------------------
-@app.post("/analyze/multiple")
-async def analyze_multiple(diary: DiaryItems):
-    results = []
+# ---------------------------------------------------------
+# ⭐ 2) 통계 분석 엔드포인트 (Next.js → FastAPI)
+# ---------------------------------------------------------
+@app.post("/analyze/stats")
+async def analyze_stats(data: DiaryStats):
+    texts = [d.content for d in data.diaries]
 
-    for content in diary.contents:
+    # GPT에게 JSON으로 응답하도록 강제
+    prompt = f"""
+    다음 사용자의 7일 간 일기를 분석해줘.
 
-        # 1) 감정 분석
-        emotion_prompt = f"다음 문장의 감정을 한 단어로 알려줘: {content}"
-        response = openai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": emotion_prompt}],
-        )
-        emotion = response.choices[0].message.content.strip()
+    일기 내용:
+    {texts}
 
-        # 2) 위로 메시지
-        comfort_prompt = f"""
-        감정: {emotion}
-        일기: {content}
+    아래 JSON 형식으로만 대답해줘:
 
-        사용자에게 진심어린 위로 한 문장을 작성해줘.
-        과한 표현 없이 부드럽고 현실적인 문장으로.
-        """
-        comfort_res = openai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": comfort_prompt}],
-        )
-        comfort_message = comfort_res.choices[0].message.content.strip()
+    {{
+      "summary": "이번 주 감정 경향 한 문단 요약",
+      "advice": "마음 관리 조언 한 문단",
+      "activities": ["추천활동1", "추천활동2"]
+    }}
 
-        # 3) 감정 조절 팁
-        regulate_prompt = f"""
-        감정: {emotion}
-        간단하고 효과적인 감정 조절 팁 1~2개를 작성해줘.
-        """
-        regulate_res = openai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": regulate_prompt}],
-        )
-        regulate_tip = regulate_res.choices[0].message.content.strip()
+    형식 틀리면 안 돼. 설명 절대 하지 마.
+    """
 
-        # 4) 추천 활동
-        activity_prompt = f"""
-        감정: {emotion}
-        감정 회복을 도와줄 활동 2개만 추천해줘. (산책, 음식, 음악 등)
-        """
-        activity_res = openai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": activity_prompt}],
-        )
-        activity_recommendation = activity_res.choices[0].message.content.strip()
+    response = openai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+    )
 
-        results.append({
-            "content": content,
-            "emotion": emotion,
-            "comfort_message": comfort_message,
-            "regulate_tip": regulate_tip,
-            "activity_recommendation": activity_recommendation
-        })
+    content = response.choices[0].message.content.strip()
 
-    return {"results": results}
+    # 💥 먼저 content가 비어 있는지 체크
+    if not content:
+        return {
+            "summary": "AI 응답이 비어 있습니다.",
+            "advice": "서버에서 분석을 다시 시도하세요.",
+            "activities": []
+        }
+
+    try:
+        result_json = json.loads(content)
+    except Exception as e:
+        print("❌ JSON 파싱 실패 → GPT 원본 출력:", content)
+        return {
+            "summary": "AI 응답을 처리하는 중 문제가 발생했습니다.",
+            "advice": "서버를 다시 시도해 주세요.",
+            "activities": []
+        }
+
+    return result_json
 
 
 # ----------------------------------------
-# 테스트 라우트
+# 기본 루트
 # ----------------------------------------
 @app.get("/")
 def root():
-    return {"status": "FastAPI Running"}
+    return {"status": "FastAPI Running OK"}
