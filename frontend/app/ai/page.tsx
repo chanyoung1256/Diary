@@ -3,6 +3,29 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { getDiariesByDate, analyzeDiaries } from "../api/apiFetch";
+import { useRouter } from "next/navigation";
+
+// ============================
+// 메인으로 버튼 컴포넌트
+// ============================
+function MainButton() {
+  const router = useRouter();
+
+  return (
+    <motion.button
+      onClick={() => router.push("/main")}
+      whileHover={{ scale: 1.05, rotate: -1 }}
+      whileTap={{ scale: 0.95 }}
+      className="absolute top-6 right-6 px-5 py-2 rounded-xl
+                 bg-[#fff4c7] border border-[#e2d4a8]
+                 shadow-[0_4px_12px_rgba(0,0,0,0.15)]
+                 text-stone-800 font-semibold text-lg
+                 hover:bg-[#ffefb3] transition-all z-30"
+    >
+      ← 메인으로
+    </motion.button>
+  );
+}
 
 export default function AiAnalyzePage() {
   const [date, setDate] = useState("");
@@ -36,6 +59,9 @@ export default function AiAnalyzePage() {
         backgroundColor: "#f8f4ec",
       }}
     >
+      {/* ⭐ 메인으로 이동 버튼 */}
+      <MainButton />
+
       {/* TITLE */}
       <h1 className="text-4xl font-bold text-center mb-10 text-[#4f473b]">
         🤖 AI 감정 분석 & 위로 메시지
@@ -79,7 +105,7 @@ export default function AiAnalyzePage() {
 
           <button
             onClick={handleAnalyze}
-            className="mt-8 w-full py-4 bg-[#9b7df5] text-white rounded-xl shadow"
+            className="mt-8 w-full py-4 bg-[#9b7df5] text-white rounded-xl shadow text-lg"
           >
             🤖 AI 감정 분석 실행
           </button>
