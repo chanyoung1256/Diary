@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import openai
+from openai import OpenAI
 from dotenv import load_dotenv
 import os
 import json
@@ -11,10 +11,12 @@ import json
 # ----------------------------------------
 load_dotenv()
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
+
 if not OPENAI_KEY:
     raise Exception("❌ .env에 OPENAI_API_KEY 없음!")
 
-openai.api_key = OPENAI_KEY
+# OpenAI 2.x 클라이언트 생성
+client = OpenAI(api_key=OPENAI_KEY)
 
 # ----------------------------------------
 # FastAPI
@@ -47,7 +49,7 @@ class MultipleRequest(BaseModel):
 
 
 # ---------------------------------------------------------
-# ⭐ 1) 하루 여러 일기 분석 엔드포인트 (Spring → FastAPI)
+# ⭐ 1) 하루 여러 일기 분석 (Spring → FastAPI)
 # ---------------------------------------------------------
 @app.post("/analyze/multiple")
 async def analyze_multiple(req: MultipleRequest):
@@ -72,7 +74,8 @@ async def analyze_multiple(req: MultipleRequest):
         형식 벗어나면 안 돼.
         """
 
-        response = openai.chat.completions.create(
+        # OpenAI 2.x 방식
+        response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
         )
@@ -98,7 +101,7 @@ async def analyze_multiple(req: MultipleRequest):
 
 
 # ---------------------------------------------------------
-# ⭐ 2) 주간 통계 분석 엔드포인트 (Next.js → FastAPI)
+# ⭐ 2) 주간 통계 분석 (Next.js → FastAPI)
 # ---------------------------------------------------------
 @app.post("/analyze/stats")
 async def analyze_stats(data: DiaryStats):
@@ -121,7 +124,7 @@ async def analyze_stats(data: DiaryStats):
     형식 틀리면 안 돼.
     """
 
-    response = openai.chat.completions.create(
+    response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
     )
@@ -145,4 +148,4 @@ async def analyze_stats(data: DiaryStats):
 # ----------------------------------------
 @app.get("/")
 def root():
-    return {"status": "FastAPI Running OK"}
+    return {"status": "FastAPI Running OK (OpenAI 2.x)"}
